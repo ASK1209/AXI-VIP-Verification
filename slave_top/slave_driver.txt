@@ -1,0 +1,251 @@
+class slave_driver extends uvm_driver;
+        `uvm_component_utils(slave_driver)
+        virtual axi_if.S_DRV_MP vif;
+
+        axi_xtn xtn,xtn1;
+        slave_config s_cfg;
+        axi_xtn  q1[$],q2[$],q3[$];
+        int count,ending;
+                semaphore sem_wad = new(1);     //semaphore for write address
+                semaphore sem_wd = new();       //semaphore for write data
+                semaphore sem_wr = new();       //semaphore for write response
+                semaphore sem_ara = new(1);     //semaphore for read address
+                semaphore sem_rd = new();       //semaphore for read data
+
+        extern function new(string name="slave_driver",uvm_component parent);
+        extern function void build_phase(uvm_phase phase);
+        extern function void connect_phase(uvm_phase phase);
+        extern task run_phase(uvm_phase phase);
+
+        extern task send_to_dut();
+        extern task awaddr(axi_xtn xtn);
+        extern task wdata(axi_xtn xtn);
+        extern task bresp(axi_xtn xtn);
+        extern task rdata(axi_xtn xtn);
+        extern task araddr();
+
+
+endclass
+
+function slave_driver::new(string name="slave_driver",uvm_component parent);
+        super.new(name,parent);
+endfunction
+
+function void slave_driver::build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        if(!uvm_config_db #(slave_config)::get(this,"","slave_config",s_cfg))
+        `uvm_fatal("Config","s_cfg is not getting. Have you set() it ?")
+endfunction
+
+function void slave_driver::connect_phase(uvm_phase phase);
+	super.connect_phase(phase);
+        vif=s_cfg.vif;
+
+endfunction
+
+task slave_driver::run_phase(uvm_phase phase);
+        super.run_phase(phase);
+                forever
+                        send_to_dut();
+//                      xtn.print();
+
+endtask
+
+task slave_driver::send_to_dut();
+
+xtn = axi_xtn::type_id::create("xtn");
+
+        q1.push_back(xtn);
+        q2.push_back(xtn);
+        q3.push_back(xtn);
+
+        fork
+        begin
+                sem_wad.get(1);
+                awaddr(xtn);
+                sem_wd.put(1);
+                sem_wad.put(1);
+        end
+
+        begin
+                sem_wd.get(1);
+                wdata(q1.pop_front());
+                sem_wr.put(1);
+                sem_wd.put(1);
+        end
+
+        begin
+                sem_wr.get(1);
+                bresp(q2.pop_front());
+                sem_wr.put(1);
+        end
+	 begin
+                sem_ara.get(1);
+                araddr();
+                sem_rd.put(1);
+                sem_ara.put(1);
+        end
+
+        begin
+                sem_rd.get(1);
+                rdata(q3.pop_front());
+                sem_rd.put(1);
+        end
+
+        join_any
+
+endtask
+
+task slave_driver::awaddr(axi_xtn xtn);
+
+        repeat($urandom_range(1,5))
+                @(vif.s_drv_cb);
+
+                vif.s_drv_cb.AWREADY <= 1;
+                @(vif.s_drv_cb);
+                while(!vif.s_drv_cb.AWVALID)
+
+                @(vif.s_drv_cb);
+
+                xtn.AWID = vif.s_drv_cb.AWID;
+                xtn.AWLEN = vif.s_drv_cb.AWLEN;
+                xtn.AWSIZE = vif.s_drv_cb.AWSIZE;
+                xtn.AWBURST = vif.s_drv_cb.AWBURST;
+                xtn.AWVALID = vif.s_drv_cb.AWVALID;
+                xtn.AWADDR = vif.s_drv_cb.AWADDR;
+
+//              q1.push_back(xtn);
+//              q2.push_back(xtn);
+
+        repeat($urandom_range(1,5))
+                @(vif.s_drv_cb);
+                vif.s_drv_cb.AWREADY<=0;
+endtask
+
+task slave_driver::wdata(axi_xtn xtn);  //q1---> start address and control info
+        int mem[int];
+// xtn=master_xtn::type_id::create("xtn");
+
+        xtn.cal_addr();
+
+        `uvm_info(get_type_name(),$sformatf("aligned:%h",xtn.aligned_addr),UVM_LOW);
+        `uvm_info(get_type_name(),$sformatf("address calculated in slave side are %p",xtn.addr),UVM_LOW);
+
+        for(int i=0; i<(xtn.AWLEN+1);   i++)
+                begin
+                        vif.s_drv_cb.WREADY<=1;
+                        @(vif.s_drv_cb);
+                        while(!vif.s_drv_cb.WVALID)
+                        @(vif.s_drv_cb);
+
+                `uvm_info(get_type_name(),$sformatf("slave driver start of AWVALID"),UVM_LOW)
+                `uvm_info(get_type_name(),$sformatf("WSTRB in slave driver is:%p",vif.s_drv_cb.WSTRB),UVM_LOW)
+
+                if(vif.s_drv_cb.WSTRB==15)
+                        mem[xtn.addr[i]]=vif.s_drv_cb.WDATA;
+
+                if(vif.s_drv_cb.WSTRB==8)
+                        mem[xtn.addr[i]]=vif.s_drv_cb.WDATA[31:24];
+
+                if(vif.s_drv_cb.WSTRB==4)
+                        mem[xtn.addr[i]]=vif.s_drv_cb.WDATA[23:16];
+
+                if(vif.s_drv_cb.WSTRB==2)
+                        mem[xtn.addr[i]]=vif.s_drv_cb.WDATA[15:8];
+
+                if(vif.s_drv_cb.WSTRB==1)
+                        mem[xtn.addr[i]]=vif.s_drv_cb.WDATA[7:0];
+
+                if(vif.s_drv_cb.WSTRB==14)
+                        mem[xtn.addr[i]]=vif.s_drv_cb.WDATA[31:8];
+
+                if(vif.s_drv_cb.WSTRB==12)
+                        mem[xtn.addr[i]]=vif.s_drv_cb.WDATA[31:16];
+		if(vif.s_drv_cb.WSTRB==3)
+                        mem[xtn.addr[i]]=vif.s_drv_cb.WDATA[15:0];
+
+                `uvm_info(get_type_name(),$sformatf("value inside mem is: %p",mem[xtn.addr[i]]),UVM_LOW)
+                vif.s_drv_cb.WREADY <=0;
+                repeat($urandom_range(1,5))
+                @(vif.s_drv_cb);
+                count=1;
+
+                end
+endtask
+
+task slave_driver::bresp(axi_xtn xtn);
+        xtn = axi_xtn::type_id::create("xtn");
+
+        vif.s_drv_cb.BVALID <= 1;
+        vif.s_drv_cb.BRESP <= 0;
+        vif.s_drv_cb.BID <= xtn.AWID;
+
+        @(vif.s_drv_cb);
+        while(!vif.s_drv_cb.BREADY)
+        @(vif.s_drv_cb);
+
+        vif.s_drv_cb.BVALID <=0;
+        vif.s_drv_cb.BRESP <= 'hx;
+
+        repeat($urandom_range(1,5))
+                @(vif.s_drv_cb);
+endtask
+
+task slave_driver::araddr();
+
+xtn = axi_xtn::type_id::create("xtn");
+
+repeat($urandom_range(1,5))
+        @(vif.s_drv_cb);
+
+        vif.s_drv_cb.ARREADY <= 1;
+
+        while(!vif.s_drv_cb.ARVALID)
+                @(vif.s_drv_cb);
+		xtn.ARID = vif.s_drv_cb.ARID;
+                xtn.ARLEN = vif.s_drv_cb.ARLEN;
+                xtn.ARSIZE = vif.s_drv_cb.ARSIZE;
+                xtn.ARBURST = vif.s_drv_cb.ARBURST;
+
+                xtn.ARADDR = vif.s_drv_cb.ARADDR;
+
+vif.s_drv_cb.ARREADY <= 0;
+
+                q3.push_back(xtn);
+                repeat($urandom_range(1,5))
+                @(vif.s_drv_cb);
+        endtask
+
+task slave_driver::rdata(axi_xtn xtn);
+        int length =xtn.ARLEN;
+//      xtn=axi_xtn::type_id::create("xtn");
+//      length = xtn.ARLEN;
+        for(int i=0; i<length+1; i++)
+        begin
+
+                vif.s_drv_cb.RDATA <= $urandom;
+
+                vif.s_drv_cb.RVALID <= 1;
+                vif.s_drv_cb.RID <= xtn.ARID;
+                vif.s_drv_cb.RRESP <= 0;
+
+                if(i==(length))
+                        vif.s_drv_cb.RLAST <= 1;
+                else
+                        vif.s_drv_cb.RLAST <= 0;
+
+                @(vif.s_drv_cb);
+                while(!vif.s_drv_cb.RREADY)
+                        @(vif.s_drv_cb);
+
+                vif.s_drv_cb.RVALID <=0;
+                vif.s_drv_cb.RLAST <=0;
+                vif.s_drv_cb.RRESP <= 'hz;
+
+                repeat($urandom_range(1,5))
+		@(vif.s_drv_cb);
+
+                count=1;
+        end
+endtask

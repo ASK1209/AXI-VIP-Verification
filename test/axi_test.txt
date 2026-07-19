@@ -1,0 +1,170 @@
+class test extends uvm_test;
+        `uvm_component_utils(test)
+
+        env_config e_cfg;
+        env env_h;
+
+        master_config m_cfg[];
+        slave_config s_cfg[];
+
+        int no_of_master_agents = 1;
+        int no_of_slave_agents = 1;
+        bit has_master_agent = 1;
+        bit has_slave_agent = 1;
+
+        extern function new(string name="test",uvm_component parent);
+        extern function void agent_config();
+        extern function void build_phase(uvm_phase phase);
+        extern function void end_of_elaboration_phase(uvm_phase phase);
+        extern function void start_of_simulation_phase(uvm_phase phase);
+endclass
+
+function test::new(string name ="test",uvm_component parent);
+        super.new(name,parent);
+endfunction
+
+function void test::agent_config();
+
+        // Master Agent config
+        if(has_master_agent)
+        begin
+        m_cfg=new[no_of_master_agents];
+
+        foreach(m_cfg[i])
+        begin
+
+        m_cfg[i]=master_config::type_id::create($sformatf("m_cfg[%0d]",i));
+        if(!uvm_config_db #(virtual axi_if)::get(this,"","vif_0",m_cfg[i].vif))
+        `uvm_fatal("Config","cannot get() virtual_if, Have you set() it ?")
+
+        m_cfg[i].is_active = UVM_ACTIVE;
+	e_cfg.m_cfg[i]=m_cfg[i];
+        end
+        end
+
+        // slave Agent config
+        if(has_slave_agent)
+        begin
+        s_cfg = new[no_of_slave_agents];
+
+        foreach(s_cfg[i])
+        begin
+        s_cfg[i] = slave_config::type_id::create($sformatf("s_cfg[%0d]",i));
+
+        if(!uvm_config_db #(virtual axi_if)::get(this,"","vif_0",s_cfg[i].vif))
+        `uvm_fatal("Config","cannot get() virtual_if, Have you set() it")
+
+        s_cfg[i].is_active = UVM_ACTIVE;
+        e_cfg.s_cfg[i]=s_cfg[i];
+        end
+        end
+        e_cfg.no_of_master_agents = no_of_master_agents;
+        e_cfg.no_of_slave_agents = no_of_slave_agents;
+        e_cfg.has_master_agent = has_master_agent;
+        e_cfg.has_slave_agent = has_slave_agent;
+endfunction
+
+function void test::build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        e_cfg = env_config::type_id::create("e_cfg",this);
+
+        if(has_master_agent)
+        begin
+        e_cfg.m_cfg = new[no_of_master_agents];
+        end
+
+        if(has_slave_agent)
+        begin
+        e_cfg.s_cfg = new[no_of_slave_agents];
+        end
+	agent_config();
+
+        uvm_config_db #(env_config)::set(null,"*","env_config",e_cfg);
+
+        env_h = env::type_id::create("env_h",this);
+
+
+endfunction
+
+function void test::end_of_elaboration_phase(uvm_phase phase);
+        super.end_of_elaboration_phase(phase);
+        uvm_top.print_topology;
+endfunction
+
+function void test::start_of_simulation_phase(uvm_phase phase);
+        super.start_of_simulation_phase(phase);
+
+
+endfunction
+
+class fixed_test extends test;
+        `uvm_component_utils(fixed_test)
+
+        fixed_vseq fixed;
+
+        extern function new(string name="fixed_test",uvm_component parent);
+        extern task run_phase(uvm_phase phase);
+endclass
+
+function fixed_test::new(string name="fixed_test",uvm_component parent);
+        super.new(name,parent);
+endfunction
+
+task fixed_test::run_phase(uvm_phase phase);
+        super.run_phase(phase);
+
+        fixed = fixed_vseq::type_id::create("fixed");
+
+        phase.raise_objection(this);
+
+        fixed.start(env_h.v_seqrh);
+	#5000;
+        phase.drop_objection(this);
+endtask
+
+class incr_test extends test;
+        `uvm_component_utils(incr_test)
+
+        incr_vseq incr;
+
+        extern function new(string name="incr_test",uvm_component parent);
+        extern task run_phase(uvm_phase phase);
+endclass
+
+function incr_test::new(string name="incr_test",uvm_component parent);
+        super.new(name,parent);
+endfunction
+
+task incr_test::run_phase(uvm_phase phase);
+        super.run_phase(phase);
+
+        incr = incr_vseq::type_id::create("incr");
+
+        phase.raise_objection(this);
+
+        incr.start(env_h.v_seqrh);
+        //#5000;
+        phase.drop_objection(this);
+endtask
+
+class wrap_test extends test;
+        `uvm_component_utils(wrap_test)
+
+        wrap_vseq wrap;
+        extern function new(string name="wrap_test",uvm_component parent);
+        extern task run_phase(uvm_phase phase);
+endclass
+
+function wrap_test::new(string name="wrap_test",uvm_component parent);
+        super.new(name,parent);
+endfunction
+task wrap_test::run_phase(uvm_phase phase);
+        super.run_phase(phase);
+        wrap =wrap_vseq::type_id::create("wrap_vseq");
+
+        phase.raise_objection(this);
+        wrap.start(env_h.v_seqrh);
+        //#15000;
+        phase.drop_objection(this);
+endtask

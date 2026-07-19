@@ -1,0 +1,88 @@
+class env extends uvm_env;
+        `uvm_component_utils(env)
+
+        master_agent_top m_agt_top;
+        slave_agent_top s_agt_top;
+
+        scoreboard sb;
+        virtual_sequencer v_seqrh;
+
+        env_config e_cfg;
+
+        extern function new(string name ="env", uvm_component parent);
+        extern function void build_phase (uvm_phase phase);
+        extern function void connect_phase (uvm_phase phase);
+endclass
+
+function env::new(string name ="env", uvm_component parent);
+        super.new(name,parent);
+endfunction
+
+function void env::build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        if(!uvm_config_db #(env_config)::get(this,"","env_config",e_cfg))
+                `uvm_fatal("Config","cannot get the env_config form uvm_config_db.Have you set() it?")
+
+        //Master Agent top
+        if(e_cfg.has_master_agent)
+        begin
+                m_agt_top = master_agent_top::type_id::create("m_agt_top",this);
+        end
+
+        //Slave Agent top
+                if(e_cfg.has_slave_agent)
+        begin
+                s_agt_top = slave_agent_top::type_id::create("s_agt_top",this);
+        end
+
+        //virtual sequencer
+
+        if(e_cfg.has_virtual_sequencer)
+	begin
+                v_seqrh=virtual_sequencer::type_id::create("v_seqrh",this);
+        end
+
+        // scoreboard
+        if(e_cfg.has_scoreboard)
+        begin
+                sb = scoreboard::type_id::create("sb",this);
+        end
+
+endfunction
+
+function void env::connect_phase (uvm_phase phase);
+        super.connect_phase(phase);
+
+        if(e_cfg.has_virtual_sequencer)
+        begin
+        if(e_cfg.has_master_agent)
+        for(int i=0; i<e_cfg.no_of_master_agents; i++)
+        begin
+                v_seqrh.m_seqrh[i]=m_agt_top.agt_h[i].seqr_h;
+        end
+
+        if(e_cfg.has_slave_agent)
+        for(int j=0; j<e_cfg.no_of_slave_agents; j++)
+        begin
+                v_seqrh.s_seqrh[j]=s_agt_top.agt_h[j].seqr_h;
+        end
+        end
+
+        if(e_cfg.has_scoreboard)
+        begin
+                for(int k=0; k<e_cfg.no_of_master_agents; k++)
+
+                        begin
+                                m_agt_top.agt_h[k].mon_h.monitor_port.connect(sb.fifo_master[k].analysis_export);
+                        end
+        //end
+
+        //begin
+                for(int l=0; l<e_cfg.no_of_slave_agents; l++)
+		begin
+                                s_agt_top.agt_h[l].mon_h.monitor_port.connect(sb.fifo_slave[l].analysis_export);
+                        end
+        end
+
+endfunction

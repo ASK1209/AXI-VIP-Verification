@@ -1,0 +1,105 @@
+class vbase_seq extends uvm_sequence #(uvm_sequence_item);
+        `uvm_object_utils(vbase_seq)
+
+        master_sequencer m_seqrh[];
+        slave_sequencer s_seqrh[];
+
+        virtual_sequencer vseqrh;
+
+        env_config e_cfg;
+
+        master_seq_fixed fixed_seq;
+        master_seq_incr  incr_seq;
+        master_seq_wrap  wrap_seq;
+
+        extern function new(string name ="vbase_seq");
+        extern task body();
+endclass
+
+        function vbase_seq::new(string name ="vbase_seq");
+                super.new(name);
+        endfunction
+
+
+        task vbase_seq::body();
+                if(!uvm_config_db #(env_config)::get(null,get_full_name(),"env_config", e_cfg))
+                        `uvm_fatal("CONFIG","Cannot get() m_cfg from uvm_config_db. Have you set() it?")
+
+
+                        m_seqrh = new[e_cfg.no_of_master_agents];
+                        s_seqrh = new[e_cfg.no_of_slave_agents];
+
+                        assert($cast(vseqrh, m_sequencer))
+                        else
+                        begin
+                        `uvm_error("Body", "Error in casting virtual sequencer")
+                        end
+
+                        foreach(m_seqrh[i])
+                                m_seqrh[i] = vseqrh.m_seqrh[i];
+
+                        foreach(s_seqrh[i])
+				s_seqrh[i] = vseqrh.s_seqrh[i];
+        endtask: body
+
+class fixed_vseq extends vbase_seq;
+        `uvm_object_utils(fixed_vseq)
+
+
+        extern function new(string name="fixed_vseq");
+        extern task body();
+endclass
+
+function fixed_vseq::new(string name ="fixed_vseq");
+        super.new(name);
+endfunction
+
+task fixed_vseq::body();
+        super.body();
+        if(e_cfg.has_master_agent)
+        begin
+                fixed_seq = master_seq_fixed::type_id::create("fixed_seq");
+                fixed_seq.start(m_seqrh[0]);
+        end
+endtask
+
+class incr_vseq extends vbase_seq;
+        `uvm_object_utils(incr_vseq)
+
+        extern function new(string name="incr_vseq");
+        extern task body();
+endclass
+
+function incr_vseq::new(string name="incr_vseq");
+        super.new(name);
+endfunction
+
+task incr_vseq::body();
+        super.body();
+        if(e_cfg.has_master_agent)
+        begin
+                incr_seq = master_seq_incr::type_id::create("incr_seq");
+                incr_seq.start(m_seqrh[0]);
+	end
+endtask
+
+class wrap_vseq extends vbase_seq;
+        `uvm_object_utils(wrap_vseq)
+
+        extern function new(string name="wrap_vseq");
+        extern task body();
+endclass
+
+function wrap_vseq::new(string name="wrap_vseq");
+        super.new(name);
+endfunction
+
+task wrap_vseq::body();
+        super.body();
+
+        if(e_cfg.has_master_agent)
+        begin
+                wrap_seq=master_seq_wrap::type_id::create("wrap_seq");
+                wrap_seq.start(m_seqrh[0]);
+        end
+endtask
