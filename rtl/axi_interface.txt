@@ -1,0 +1,227 @@
+interface axi_if(input bit clk);
+
+//      AXI_MASTER Signals
+
+//write address channel signals(AW)
+
+        logic [3:0] AWID;
+        logic [31:0] AWADDR;
+        logic [3:0] AWLEN;
+        logic [2:0] AWSIZE;
+        logic [1:0] AWBURST;
+        /*logic [1:0] AWLOCK;
+        logic [3:0] AWCACHE;
+        logic [2:0] AWPROT;*/
+        bit     AWVALID;
+        bit AWREADY;
+
+// write data channel signals (W)
+
+        logic [3:0] WID;
+        logic [31:0] WDATA;
+        logic [3:0] WSTRB;
+        bit WVALID,WLAST;
+        bit WREADY;
+// Write response channel signals (B)
+
+        logic [3:0] BID;
+        logic [1:0] BRESP;
+        bit BVALID;
+        bit  BREADY;
+
+
+
+// Read address channel signals (AR)
+
+        logic [3:0] ARID;
+        logic [31:0] ARADDR;
+        logic [3:0] ARLEN;
+        logic [2:0] ARSIZE;
+        logic [1:0] ARBURST;
+	bit ARREADY;
+        bit ARVALID;
+// Read data channel signals
+
+        logic[3:0] RID;
+        logic[31:0] RDATA;
+        logic[1:0] RRESP;
+        logic   RLAST;
+        bit     RVALID;
+        bit     RREADY;
+
+clocking m_drv_cb@(posedge clk);
+        default input #0 output #0;
+
+//Write_address_channel
+
+        output AWID;
+        output AWADDR;
+        output AWLEN;
+        output AWSIZE;
+        output AWBURST;
+        //output AWLOCK;
+        output AWVALID;
+        input AWREADY;
+//Write_data channel
+
+        output WID,WDATA,WSTRB,WLAST,WVALID;
+        input WREADY;
+//Write Response channel
+        input BID,BRESP,BVALID;
+        output BREADY;
+//Read_address_channel
+        output ARID,ARADDR,ARLEN,ARSIZE,ARBURST,ARVALID;
+        input ARREADY;
+//Read data/responce channel
+
+        output RREADY;
+        input RID,RDATA,RRESP,RLAST,RVALID;
+endclocking
+
+clocking m_mon_cb @(posedge clk);
+	default input #0 output #0;
+        input AWID,AWADDR,AWLEN,AWSIZE,AWBURST,AWVALID;
+        input AWREADY;
+//write_data channel
+        input WID,WDATA,WSTRB,WLAST,WVALID;
+        input WREADY;
+//write_responce channel
+        input BID,BRESP,BVALID;
+        input BREADY;
+//read_address_channel
+        input ARID,ARADDR,ARLEN,ARSIZE,ARBURST,ARVALID;
+        input ARREADY;
+//read_data/responce channel
+input RID,RDATA,RRESP,RLAST,RVALID;
+input RREADY;
+endclocking
+
+clocking s_drv_cb@(posedge clk);
+default input #0 output #0;
+
+//write_address_channel
+input AWID,AWADDR,AWLEN,AWSIZE,AWBURST,AWVALID;
+output AWREADY;
+
+//write_data channel
+input WID,WDATA,WSTRB,WLAST,WVALID;
+output WREADY;
+
+//write_response channel
+output BID,BRESP,BVALID;
+input BREADY;
+
+//read_address_channel
+input ARID,ARADDR,ARLEN,ARSIZE,ARBURST,ARVALID;
+output ARREADY;
+
+//read_data/response channel
+output RID,RDATA,RRESP,RLAST,RVALID;
+input RREADY;
+
+endclocking
+clocking s_mon_cb @(posedge clk);
+default input #0 output #0;
+input AWID,AWADDR,AWLEN,AWSIZE,AWBURST,AWVALID;
+input AWREADY;
+
+//write_data channel
+input WID,WDATA,WLAST,WVALID,WSTRB;
+input WREADY;
+
+//write_response channel
+input BID,BRESP,BVALID;
+input BREADY;
+
+//read_address_channel
+input ARID,ARADDR,ARLEN,ARSIZE,ARBURST,ARVALID;
+input ARREADY;
+
+//read_data/response channel
+input RID,RDATA,RRESP,RLAST,RVALID;
+input RREADY;
+
+endclocking
+
+modport M_DRV_MP(clocking m_drv_cb);
+modport M_MON_MP(clocking m_mon_cb);
+modport S_DRV_MP(clocking s_drv_cb);
+modport S_MON_MP(clocking s_mon_cb);
+
+
+
+property awvalid;
+@(posedge clk) $rose(AWVALID)  |-> $stable(AWID) && $stable(AWLEN) && $stable(AWBURST) && $stable(AWSIZE) && (AWADDR) until AWREADY [->1];
+endproperty
+
+property wvalid;
+@(posedge clk) $rose(WVALID)  |-> $stable(WID) && $stable(WDATA) && $stable(WSTRB) && $stable(WLAST) until WREADY [->1];
+endproperty
+
+property bvalid;
+@(posedge clk) $rose(BVALID)  |-> $stable(BID) && $stable(BRESP) until BREADY [->1];
+endproperty
+property arvalid;
+@(posedge clk) $rose(ARVALID) |-> $stable(ARID) && $stable(ARLEN) && $stable(ARBURST) && $stable(ARSIZE) && (ARADDR) until ARREADY [->1];
+endproperty
+
+property rvalid;
+@(posedge clk) $rose(RVALID) |-> $stable(RID) && $stable(RDATA) &&  $stable(RLAST) && (RRESP) until RREADY [->1];
+endproperty
+
+property awvalid_awready;
+@(posedge clk) AWVALID && !AWREADY |=> AWVALID;
+endproperty
+
+property wvalid_wready;
+@(posedge clk) WVALID && !WREADY |=> WVALID;
+endproperty
+
+property bvalid_bready;
+@(posedge clk) BVALID && !BREADY |=> BVALID;
+endproperty
+
+property arvalid_arready;
+@(posedge clk) ARVALID && !ARREADY |=> ARVALID;
+endproperty
+
+property rvalid_rready;
+@(posedge clk) RVALID && !RREADY |=> RVALID;
+endproperty
+
+property R_wrap_type;
+@(posedge clk) (ARBURST == 2) |-> (ARSIZE == 1) |-> ARADDR %2 ==0;
+endproperty
+
+property R_wrap_type_1;
+@(posedge clk) (ARBURST == 2) |-> (ARSIZE == 2) |-> ARADDR %4 ==0;
+endproperty
+
+property W_wrap_type;
+@(posedge clk) (AWBURST == 2) |-> (AWSIZE == 1) |-> AWADDR %2 ==0;
+endproperty
+
+property W_wrap_type_1;
+@(posedge clk) (AWBURST == 2) |-> (AWSIZE == 1) |-> AWADDR %2 ==0;
+endproperty
+
+
+assert property (awvalid);
+assert property (wvalid);
+assert property (bvalid);
+assert property (arvalid);
+assert property (rvalid);
+assert property (awvalid_awready);
+assert property (wvalid_wready);
+assert property (bvalid_bready);
+assert property (arvalid_arready);
+assert property (rvalid_rready);
+assert property (R_wrap_type);
+assert property (R_wrap_type_1);
+assert property (W_wrap_type);
+assert property (W_wrap_type_1);
+
+
+
+endinterface
+                       

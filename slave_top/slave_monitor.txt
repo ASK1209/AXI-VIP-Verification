@@ -1,0 +1,193 @@
+class slave_monitor extends uvm_monitor;
+        `uvm_component_utils(slave_monitor)
+        virtual axi_if.S_MON_MP vif;
+
+        axi_xtn xtn,xtn1,xtn2,xtn3,xtn4;
+        axi_xtn q1[$],q2[$];
+
+        slave_config s_cfg;
+        /*semaphore sem_awdc = new();
+        semaphore sem_wdrc = new();
+        semaphore sem_wdc = new(1);
+        semaphore sem_awc = new(1);
+        semaphore sem_wrc = new(1);
+        semaphore sem_ardc = new();
+        semaphore sem_arc = new(1);
+        semaphore sem_rdc = new(1);*/
+ semaphore sem_wad = new(1);    //semaphore for write address
+                semaphore sem_wd = new();       //semaphore for write data
+                semaphore sem_wr = new();       //semaphore for write response
+                semaphore sem_ara = new(1);     //semaphore for read address
+                semaphore sem_rd = new();       //semaphore for read data
+        static int pkt_sent;
+        uvm_analysis_port#(axi_xtn) monitor_port;
+
+        extern function new(string name="slave_monitor",uvm_component parent);
+        extern function void build_phase(uvm_phase phase);
+        extern function void connect_phase(uvm_phase phase);
+        extern task run_phase(uvm_phase phase);
+        extern task collect_data();
+        extern task collect_awaddr();
+        extern task collect_wdata(axi_xtn xtn);
+        extern task collect_bresp();
+        extern task collect_raddr();
+        extern task collect_rdata(axi_xtn xtn);
+
+endclass
+
+function slave_monitor::new(string name="slave_monitor",uvm_component parent);
+        super.new(name,parent);
+        monitor_port=new("monitor_port",this);
+endfunction
+function void slave_monitor::build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        if(!uvm_config_db #(slave_config)::get(this,"","slave_config",s_cfg))
+        `uvm_fatal("Config","s_cfg is not getting by using uvm_config_db.Have you set() it")
+endfunction
+
+function void slave_monitor::connect_phase(uvm_phase phase);
+        super.connect_phase(phase);
+        vif=s_cfg.vif;
+endfunction
+
+task slave_monitor::run_phase(uvm_phase phase);
+        forever
+                begin
+                        collect_data();
+                end
+   //super.run_phase(phase);
+endtask
+task slave_monitor :: collect_data();
+        fork
+                begin
+                        sem_wad.get(1);
+                        collect_awaddr();
+                        sem_wd.put(1);
+                        sem_wad.put(1);
+                end
+                begin
+                        sem_wd.get(1);
+                        //sem_wdc.get(1);
+                        collect_wdata(q1.pop_front());
+                        sem_wr.put(1);
+                        sem_wd.put(1);
+                end
+                begin
+                        sem_wr.get(1);
+                        //sem_wrc.get(1);
+                        collect_bresp();
+                        sem_wr.put(1);
+                end
+                begin
+			sem_wr.get(1);
+                        //sem_wrc.get(1);
+                        collect_bresp();
+                        sem_wr.put(1);
+                end
+                begin
+                        sem_ara.get(1);
+                        collect_raddr();
+                        sem_rd.put(1);
+                        sem_ara.put(1);
+                end
+                begin
+                        sem_rd.get(1);
+                        //sem_rdc.get(1);
+                        collect_rdata(q2.pop_front());
+                        sem_rd.put(1);
+                end
+        join_any
+endtask
+task slave_monitor :: collect_awaddr();
+        xtn = axi_xtn :: type_id:: create("xtn");
+        wait(vif.s_mon_cb.AWVALID && vif.s_mon_cb.AWREADY)
+                xtn.AWVALID = vif.s_mon_cb.AWVALID;
+                xtn.AWADDR = vif.s_mon_cb.AWADDR;
+                xtn.AWSIZE = vif.s_mon_cb.AWSIZE;
+                xtn.AWID = vif.s_mon_cb.AWID;
+                xtn.AWLEN = vif.s_mon_cb.AWLEN;
+                xtn.AWBURST = vif.s_mon_cb.AWBURST;
+                q1.push_back(xtn);
+    monitor_port.write(xtn);
+                pkt_sent++;
+                `uvm_info("SLV_MONITOR",$sformatf("printing from slave monitor collect_awaddr %s",xtn.sprint()),UVM_LOW)
+                @(vif.s_mon_cb);
+endtask
+task slave_monitor :: collect_wdata(axi_xtn xtn);
+xtn1 = axi_xtn::type_id::create("xtn1");
+xtn1 = xtn;
+xtn.cal_addr();
+xtn1.WDATA = new[xtn.AWLEN +1];
+xtn1.WSTRB = new[xtn.WDATA.size()];
+foreach(xtn1.WDATA[i])
+begin
+        wait(vif.s_mon_cb.WVALID && vif.s_mon_cb.WREADY)
+                xtn1.WSTRB[i] = vif.s_mon_cb.WSTRB;
+                if(vif.s_mon_cb.WSTRB == 15)
+                        xtn1.WDATA[i] = vif.s_mon_cb.WDATA;
+                if(vif.s_mon_cb.WSTRB == 8)
+                        xtn1.WDATA[i] = vif.s_mon_cb.WDATA[31:24];
+                if(vif.s_mon_cb.WSTRB == 4)
+                        xtn1.WSTRB[i] = vif.s_mon_cb.WDATA[23:16];
+                if(vif.s_mon_cb.WSTRB == 2)
+                        xtn1.WDATA[i] = vif.s_mon_cb.WDATA[15:8];
+                if(vif.s_mon_cb.WSTRB == 1)
+                        xtn1.WDATA[i] = vif.s_mon_cb.WDATA[7:0];
+                if(vif.s_mon_cb.WSTRB == 14)
+                        xtn1.WDATA[i] = vif.s_mon_cb.WDATA[31:8];
+                if(vif.s_mon_cb.WSTRB == 12)
+                        xtn1.WDATA[i] = vif.s_mon_cb.WDATA[31:16];
+                if(vif.s_mon_cb.WSTRB == 3)
+                        xtn1.WDATA[i] = vif.s_mon_cb.WDATA[15:0];
+                xtn1.WID = vif.s_mon_cb.WID;
+                xtn1.WLAST = vif.s_mon_cb.WLAST;
+                xtn1.WVALID = vif.s_mon_cb.WVALID;
+                @(vif.s_mon_cb);
+end
+monitor_port.write(xtn1);
+pkt_sent++;
+`uvm_info("SLV_MONITOR",$sformatf("printing from slave monitor collect_wdata \n %s",xtn1.sprint()),UVM_LOW)
+endtask
+task slave_monitor ::collect_bresp();
+xtn2 = axi_xtn :: type_id:: create("xtn2");
+wait(vif.s_mon_cb.BVALID && vif.s_mon_cb.BREADY)
+        xtn2.BRESP = vif.s_mon_cb.BRESP;
+        monitor_port.write(xtn2);
+        `uvm_info("SLV_MONITOR",$sformatf("printing from slave monitor collect_bresp \n %s",xtn2.sprint()),UVM_LOW)
+        @(vif.s_mon_cb);
+endtask
+task slave_monitor::collect_raddr();
+xtn3 = axi_xtn::type_id::create("xtn3");
+wait(vif.s_mon_cb.ARVALID && vif.s_mon_cb.ARREADY)
+        xtn.ARVALID = vif.s_mon_cb.ARVALID;
+       xtn.ARID = vif.s_mon_cb.ARID;
+	xtn.ARLEN = vif.s_mon_cb.ARLEN;
+       xtn.ARSIZE = vif.s_mon_cb.ARSIZE;
+       xtn.ARBURST = vif.s_mon_cb.ARBURST;
+        xtn.ARADDR = vif.s_mon_cb.ARADDR;
+        q2.push_back(xtn3);
+        @(vif.s_mon_cb);
+        monitor_port.write(xtn3);
+        pkt_sent++;
+     `uvm_info("SLV_MONITOR",$sformatf("printing from slave monitor collect_raddr \n %s",xtn3.sprint()),UVM_LOW)
+endtask
+task slave_monitor :: collect_rdata(axi_xtn xtn);
+xtn4 = axi_xtn :: type_id :: create("xtn4");
+xtn4 = xtn;
+xtn4.cal_addr();
+xtn4.RDATA = new[xtn.ARLEN+1];
+foreach(xtn4.RDATA[i])
+begin
+        wait(vif.s_mon_cb.RVALID && vif.s_mon_cb.ARREADY)
+                xtn4.RDATA[i] = vif.s_mon_cb.RDATA;
+    xtn4.RVALID = vif.s_mon_cb.RVALID;
+                xtn4.RID = vif.s_mon_cb.RID;
+    xtn4.RRESP = vif.s_mon_cb.RRESP;
+                xtn4.RLAST = vif.s_mon_cb.RLAST;
+                @(vif.s_mon_cb);
+end
+monitor_port.write(xtn4);
+pkt_sent++;
+`uvm_info("SLV_MONITOR",$sformatf("printing from slave monitor collect_rdata \n %s",xtn4.sprint()),UVM_LOW)
+endtask

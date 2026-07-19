@@ -1,0 +1,298 @@
+class axi_xtn extends uvm_sequence_item;
+
+        `uvm_object_utils(axi_xtn)
+
+        //write address channel
+        rand bit[31:0] AWADDR;
+        rand bit[3:0] AWID;
+        rand bit[1:0] AWBURST;
+        rand bit[2:0] AWSIZE;
+        rand bit[3:0] AWLEN;
+        bit AWVALID;
+        logic  AWREADY;
+
+        //write Data channel
+        rand bit [3:0] WID;
+        rand bit[31:0] WDATA[];
+        bit [3:0] WSTRB[];
+        bit WLAST;
+        bit WVALID;
+        logic WREADY;
+
+        // write response Channel
+        rand bit[3:0] BID;
+        bit[1:0] BRESP;
+        bit BVALID;
+        logic BREADY;
+
+        //read address channel
+        rand bit [3:0] ARID;
+        rand bit [31:0] ARADDR;
+        rand bit [3:0] ARLEN;
+        rand bit [2:0] ARSIZE;
+        rand bit [1:0] ARBURST;
+        logic ARREADY;
+        bit ARVALID;
+
+        //read data channel
+        rand bit [3:0] RID;
+        rand bit [31:0] RDATA[];
+        bit [1:0] RRESP;
+        bit RLAST;
+	logic RREADY;
+        bit RVALID;
+
+        //Local Variables
+
+        bit [31:0] addr[];
+        int no_of_bytes;
+        int aligned_addr;
+        int start_addr;
+
+        bit [31:0] raddr[];
+        int no_of_rbytes;
+        int aligned_raddr;
+        int start_raddr;
+
+        constraint wdata {WDATA.size()==(AWLEN+1);}     //wdata size should be length+1
+        constraint rdata {RDATA.size()==(ARLEN+1);}     //same for rdata
+        constraint awb {AWBURST dist{0:=10, 1:=10, 2:=10};}
+        constraint arb {ARBURST dist{0:=10, 1:=10, 2:=10};}
+        constraint write_id {AWID == WID; BID == WID;}  //All the id's should be equal
+        constraint read_id {RID == ARID;}
+        constraint  aws {AWSIZE dist{0:=10, 1:=10, 2:=10};}
+        constraint ar {ARSIZE dist{0:=10, 1:=10, 2:=10};}
+
+        constraint c1 {(AWBURST == 2'b10 && AWSIZE == 1) -> AWADDR%2 == 0;}     //alignment for wrap type of transfer
+        constraint c2{(AWBURST == 2'b10 && AWSIZE == 2) -> AWADDR%4 == 0;}
+        constraint c3{(ARBURST == 2'b10 && ARSIZE == 1) -> ARADDR%2 == 0;}
+        constraint c4{(ARBURST == 2'b10 && ARSIZE == 2) -> ARADDR%4 == 0;}
+        constraint c7 {AWLEN inside {[0:15]};} // in AXI3 max 16 transfers
+        constraint c8 {ARLEN inside {[0:15]};}
+
+        extern function new(string name="axi_xtn");
+        extern function void post_randomize();
+        extern function void cal_addr();
+        extern function void cal_raddr();
+        extern function void strb_cal();
+        extern function void do_print(uvm_printer printer);
+        extern function bit do_compare(uvm_object rhs, uvm_comparer comparer);
+endclass
+
+function axi_xtn::new(string name="axi_xtn");
+	super.new(name);
+endfunction
+
+function void axi_xtn::post_randomize();
+        WSTRB=new[AWLEN+1];
+        cal_addr();
+        strb_cal();
+        cal_raddr();
+endfunction
+
+function void axi_xtn::cal_addr();
+        bit wb =0;              // wrapp_boundary
+        int burst_length = AWLEN+1;
+        int wrap_boundary;
+        int addr_n;
+        no_of_bytes=2**AWSIZE;
+        aligned_addr = (int'(AWADDR/no_of_bytes))*no_of_bytes;
+        start_addr = AWADDR;
+
+        wrap_boundary=(int'(AWADDR/(no_of_bytes*burst_length)))*(no_of_bytes*burst_length);     // lower_wrap_boundary
+        addr_n=wrap_boundary+(no_of_bytes*burst_length);        // upper_wrap_boundary
+
+
+        addr=new[AWLEN+1];
+        addr[0]=AWADDR;
+
+        for(int i=1; i<(burst_length); i++)
+                begin
+                        if(AWBURST==0)
+                                addr[i]=AWADDR;
+
+                        if(AWBURST==1)
+                                begin
+                                        addr[i]=aligned_addr+(i)*no_of_bytes;
+                                end
+
+                        if(AWBURST==2)
+                                begin
+                                        if(wb==0)
+                                                begin
+                                                        addr[i]=aligned_addr+(i)*no_of_bytes;
+						   if(addr[i]==(wrap_boundary+(no_of_bytes*burst_length)));
+                                                                begin
+                                                                        addr[i]=wrap_boundary;
+                                                                        wb++;
+                                                                end
+                                                end
+
+                                        else
+                                        addr[i]=start_addr+((i)*no_of_bytes)-(no_of_bytes*burst_length);
+                                end
+                        end
+endfunction
+
+function void axi_xtn::cal_raddr();
+        bit wb =0;              // wrapp_boundary
+        int burst_length=ARLEN+1;
+        int wrap_boundary;
+        int addr_n;
+        no_of_rbytes=2**ARSIZE;
+        aligned_addr = (int'(ARADDR/no_of_rbytes))*no_of_rbytes;
+        start_addr = ARADDR;
+
+        wrap_boundary=(int'(ARADDR/(no_of_rbytes*burst_length)))*(no_of_rbytes*burst_length);   // lower_wrap_boundary
+        addr_n=wrap_boundary+(no_of_rbytes*burst_length);       // upper_wrap_boundary
+
+
+        addr=new[ARLEN+1];
+        addr[0]=ARADDR;
+
+        for(int i=1; i<(burst_length); i++)
+                begin
+                        if(ARBURST==0)
+                                addr[i]=ARADDR;
+
+                        if(ARBURST==1)
+                                begin
+                                        addr[i]=aligned_addr+(i)*no_of_rbytes;
+                                end
+
+                        if(ARBURST==2)
+                                begin
+					if(wb==0)
+                                                begin
+                                                        addr[i]=aligned_addr+(i)*no_of_rbytes;
+                                                if(addr[i]==(wrap_boundary+(no_of_rbytes*burst_length)));
+                                                                begin
+                                                                        addr[i]=wrap_boundary;
+                                                                        wb++;
+                                                                end
+                                                end
+                                else
+                                addr[i]=start_addr+((i)*no_of_rbytes)-(no_of_rbytes*burst_length);
+                                end
+                        end
+endfunction
+
+function void axi_xtn::strb_cal();
+int data_bus_bytes = 4;
+int lower_byte_lane,upper_byte_lane;
+
+int lower_byte_lane_0 = start_addr -((int'(start_addr/data_bus_bytes))*data_bus_bytes);
+int upper_byte_lane_0 = (aligned_addr+(no_of_bytes-1))-((int'(start_addr/data_bus_bytes))*data_bus_bytes);
+
+for(int j=lower_byte_lane_0; j<=upper_byte_lane_0; j++)
+        begin
+                WSTRB[0][j]=1;
+        end
+for(int i=1; i<(AWLEN+1); i++)
+        begin
+                lower_byte_lane = addr[i]-(int'(addr[i]/data_bus_bytes))*data_bus_bytes;
+                upper_byte_lane = lower_byte_lane + no_of_bytes-1;
+                for(int j=lower_byte_lane; j<=upper_byte_lane; j++)
+                        WSTRB[i][j]=1;
+        end
+endfunction
+
+
+
+
+function void axi_xtn::do_print(uvm_printer printer);
+        super.do_print(printer);
+	 // write address channel
+        printer.print_field("AWADDR",   this.AWADDR,    32,     UVM_HEX);
+        printer.print_field("AWID",     this.AWID,      4,      UVM_HEX);
+        printer.print_field("AWVALID",  this.AWVALID,   1,      UVM_DEC);
+        printer.print_field("AWREADY",  this.AWREADY,   1,      UVM_DEC);
+        printer.print_field("AWSIZE",   this.AWSIZE,    3,      UVM_DEC);
+        printer.print_field("AWBURST",  this.AWBURST,   2,      UVM_DEC);
+        printer.print_field("AWLEN",    this.AWLEN,     4,      UVM_DEC);
+
+        // write data channel
+        printer.print_field("WID",      this.WID,       4,      UVM_HEX);
+//      printer.print_array_header("WDATA",     WDATA.size());
+        foreach(WDATA[i])
+        begin
+        printer.print_field($sformatf("WDATA[%0d]",i),  WDATA[i],       32,     UVM_HEX);
+        end
+//      printer.print_array_header("WSTRB",     WSTRB.size());
+        foreach (WSTRB[i])
+        begin
+        printer.print_field($sformatf("WSTRB[%0d]",i),  WSTRB[i],       4,      UVM_HEX);
+        end
+        printer.print_field("WLAST",    this.WLAST,     1,      UVM_DEC);
+        printer.print_field("WVALID",   this.WVALID,    1,      UVM_DEC);
+        printer.print_field("WREADY",   this.WREADY,    1,      UVM_DEC);
+
+        //write response chanell
+        printer.print_field("BID",      this.BID,       4,      UVM_HEX);
+        printer.print_field("BRESP",    this.BRESP,     2,      UVM_BIN);
+        printer.print_field("BVALID",   this.BVALID,    1,      UVM_DEC);
+        printer.print_field("BREADY",   this.BREADY,    1,      UVM_DEC);
+
+        //read address channel
+        printer.print_field("ARID",     this.ARID,      4,      UVM_HEX);
+        printer.print_field("ARADDR",   this.ARADDR,    32,     UVM_HEX);
+        printer.print_field("ARLEN",    this.ARLEN,     4,      UVM_DEC);
+        printer.print_field("ARSIZE",   this.ARSIZE,    3,      UVM_DEC);
+        printer.print_field("ARBURST",  this.ARBURST,   2,      UVM_DEC);
+        printer.print_field("ARVALID",  this.ARVALID,   1,      UVM_DEC);
+        printer.print_field("ARREADY",  this.ARREADY,   1,      UVM_DEC);
+
+	//read data channel
+        printer.print_field("RID",      this.RID,       4,      UVM_HEX);
+//      printer.print_array_header("RDATA",     RDATA.size());
+        foreach(RDATA[i])
+        begin
+        printer.print_field($sformatf("RDATA[%0d]",i),  RDATA[i],       32,     UVM_HEX);
+        end
+        printer.print_field("RLAST",    this.RLAST,     1,      UVM_DEC);
+        printer.print_field("RRESP",    this.RRESP,     2,      UVM_DEC);
+        printer.print_field("RVALID",   this.RVALID,    1,      UVM_DEC);
+        printer.print_field("RREADY",   this.RREADY,    1,      UVM_DEC);
+
+endfunction
+function bit axi_xtn::do_compare(uvm_object rhs,uvm_comparer comparer);
+// handle for overiding the variable
+        axi_xtn rhs_;
+        if(!$cast(rhs_,rhs))
+                begin
+                        `uvm_error("do_compare","cast of rhs object failed")
+                        return 0;
+                end
+        return  super.do_compare(rhs,comparer) &&
+
+                //write address and control
+                this.AWID == rhs_.AWID &&
+                this.AWADDR == rhs_.AWADDR &&
+                this.AWLEN == rhs_.AWLEN &&
+                this.AWSIZE == rhs_.AWSIZE &&
+                this.AWBURST == rhs_.AWBURST &&
+
+                //write data channel signals (w)
+                this.WID == rhs_.WID &&
+                this.WDATA == rhs_.WDATA &&
+                this.WSTRB == rhs_.WSTRB &&
+                //write response channel signals (B)
+
+                this.BID == rhs_.BID &&
+                this.BRESP == rhs_.BRESP &&
+
+                //Read address Channel
+                this.ARID == rhs_.ARID &&
+		this.ARADDR == rhs_.ARADDR &&
+                this.ARLEN == rhs_.ARLEN &&
+                this.ARSIZE == rhs_.ARSIZE &&
+                this.ARBURST == rhs_.ARBURST &&
+
+
+                //Read data channel
+
+                this.RID == rhs_.RID  &&
+                this.RRESP == rhs_.RRESP &&
+                this.RDATA == rhs_.RDATA;
+
+endfunction

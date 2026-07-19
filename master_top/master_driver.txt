@@ -1,0 +1,199 @@
+class master_driver extends uvm_driver #(axi_xtn);
+
+        `uvm_component_utils(master_driver)
+        virtual axi_if.M_DRV_MP vif;
+
+        master_config m_cfg;
+
+        axi_xtn xtn;
+        axi_xtn q1[$], q2[$], q3[$], q4[$],  q5[$];
+
+        semaphore sem_awc = new(1);     //semaphore for write address channel
+        semaphore sem_wdc = new();      //semaphore for write data channel
+        semaphore sem_wrc = new();      //semaphore for write response
+
+        semaphore sem_arc = new(1);     //semaphore for read address channel
+        semaphore sem_rdc = new();      //semaphore for read data channel
+
+        extern function new (string name ="master_driver",uvm_component parent);
+        extern function void build_phase(uvm_phase phase);
+        extern function void connect_phase(uvm_phase phase);
+        extern task run_phase(uvm_phase phase);
+        extern task send_to_dut(axi_xtn xtn);
+        extern task drive_awaddr(axi_xtn xtn);
+        extern task drive_wdata(axi_xtn xtn);
+        extern task drive_bresp(axi_xtn xtn);
+
+        extern task drive_raddr(axi_xtn xtn);
+        extern task drive_rdata(axi_xtn xtn);
+
+
+endclass
+
+function master_driver::new(string name = "master_driver",uvm_component parent);
+        super.new(name,parent);
+endfunction
+
+function void master_driver::build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        if(!uvm_config_db #(master_config)::get(this,"","master_config",m_cfg))
+		`uvm_fatal("CONFIG","Cannot get() m_cfg from uvm_config_db. Have you set() it?")
+endfunction
+
+function void master_driver::connect_phase (uvm_phase phase);
+        super.connect_phase(phase);
+        vif=m_cfg.vif;
+endfunction
+
+task master_driver:: run_phase(uvm_phase phase);
+        super.run_phase(phase);
+
+        forever
+                begin
+                        seq_item_port.get_next_item(req);
+                        send_to_dut(req);
+                        seq_item_port.item_done();
+                        req.print();
+                end
+endtask
+
+task master_driver::send_to_dut(axi_xtn xtn);
+
+q1.push_back(xtn);
+q2.push_back(xtn);
+q3.push_back(xtn);
+q4.push_back(xtn);
+q5.push_back(xtn);
+
+        fork
+                begin
+                        sem_awc.get(1);
+                        drive_awaddr(q1.pop_front());
+                        sem_wdc.put(1);
+                        sem_awc.put(1);
+                end
+
+                begin
+                        sem_wdc.get(1);
+                        drive_wdata(q2.pop_front());
+                        sem_wrc.put(1);
+                        sem_wdc.put(1);
+		end
+		begin
+                        sem_wrc.get(1);
+                        drive_bresp(q3.pop_front());
+                        sem_wrc.put(1);
+                end
+
+                begin
+                        sem_arc.get(1);
+                        drive_raddr(q4.pop_front());
+                        sem_rdc.put(1);
+                        sem_arc.put(1);
+                end
+
+                begin
+                        sem_rdc.get(1);
+                        drive_rdata(q5.pop_front());
+                        sem_rdc.put(1);
+                end
+        join_any
+endtask
+
+task master_driver::drive_awaddr(axi_xtn xtn);
+        vif.m_drv_cb.AWVALID <= 1;
+        vif.m_drv_cb.AWADDR <= xtn.AWADDR;
+        vif.m_drv_cb.AWSIZE <= xtn.AWSIZE;
+        vif.m_drv_cb.AWID <= xtn.AWID;
+        vif.m_drv_cb.AWLEN <= xtn.AWLEN;
+        vif.m_drv_cb.AWBURST <= xtn.AWBURST;
+
+        @(vif.m_drv_cb);
+        while(!vif.m_drv_cb.AWREADY)
+        @(vif.m_drv_cb);
+        vif.m_drv_cb.AWVALID <= 0;
+
+        repeat($urandom_range(1,5))
+                @(vif.m_drv_cb);
+endtask
+
+task master_driver::drive_wdata(axi_xtn xtn);
+
+        foreach(xtn.WDATA[i])
+		
+                begin
+                        vif.m_drv_cb.WVALID <= 1;
+                        vif.m_drv_cb.WDATA <= xtn.WDATA[i];
+                        vif.m_drv_cb.WSTRB <= xtn.WSTRB[i];
+                        vif.m_drv_cb.WID <= xtn.WID;
+
+                        if(i==(xtn.AWLEN))
+                                vif.m_drv_cb.WLAST <= 1;
+                        else
+                                vif.m_drv_cb.WLAST <= 0;
+
+                        @(vif.m_drv_cb);
+                        while(!vif.m_drv_cb.WREADY)
+                        @(vif.m_drv_cb);
+                                vif.m_drv_cb.WVALID <= 0;
+                                vif.m_drv_cb.WLAST <= 0;
+
+                        repeat($urandom_range(1,5))
+                                @(vif.m_drv_cb);
+                end
+endtask
+
+task master_driver::drive_bresp(axi_xtn xtn);
+        vif.m_drv_cb.BREADY <= 1;
+        @(vif.m_drv_cb);
+        while(!vif.m_drv_cb.BVALID)
+        @(vif.m_drv_cb);
+        vif.m_drv_cb.BREADY <= 0;
+
+        repeat($urandom_range(1,5))
+                @(vif.m_drv_cb);
+endtask
+
+task master_driver::drive_raddr(axi_xtn xtn);
+        repeat($urandom_range(1,5))
+		@(vif.m_drv_cb);
+endtask
+
+task master_driver::drive_raddr(axi_xtn xtn);
+        repeat($urandom_range(1,5))
+                @(vif.m_drv_cb);
+
+                vif.m_drv_cb.ARVALID <=1;
+                vif.m_drv_cb.ARID <= xtn.ARID;
+                vif.m_drv_cb.ARLEN <= xtn.ARLEN;
+                vif.m_drv_cb.ARSIZE <= xtn.ARSIZE;
+                vif.m_drv_cb.ARBURST <= xtn.ARBURST;
+                vif.m_drv_cb.ARADDR <= xtn.ARADDR;
+                @(vif.m_drv_cb);
+
+                while(!vif.m_drv_cb.ARREADY)
+                @(vif.m_drv_cb);
+
+                vif.m_drv_cb.ARVALID <= 0;
+
+                repeat($urandom_range(1,5))
+                        @(vif.m_drv_cb);
+endtask
+
+task master_driver::drive_rdata(axi_xtn xtn);
+        repeat(xtn.ARLEN + 1'b1)
+                begin
+                        vif.m_drv_cb.RREADY <= 1'b1;
+                        @(vif.m_drv_cb);
+
+                        while(!vif.m_drv_cb.RVALID)
+                        @(vif.m_drv_cb);
+                        vif.m_drv_cb.RREADY <= 1'b0;
+
+                        repeat($urandom_range(1,5));
+                                @(vif.m_drv_cb);
+                end
+endtask
+
+		

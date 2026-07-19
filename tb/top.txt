@@ -1,0 +1,39 @@
+module top;
+
+        import axi_pkg::*;
+        import uvm_pkg::*;
+
+        bit clock;
+        bit ARESETn;
+
+        initial
+                begin
+                clock = 0;
+                forever
+                        #5 clock = ~clock;
+                end
+        initial
+                begin
+                ARESETn = 0;
+                #5 ARESETn = 1;
+                end
+
+                axi_if in0(clock);
+
+
+
+        initial
+                begin
+
+                uvm_config_db #(virtual axi_if)::set(null,"*","vif_0",in0);
+//              uvm_config_db #(virtual axi_if)::set(null,"*","vif_1",in1);
+
+
+                        run_test();
+
+                        `ifdef VCS
+                        $fsdbDumpvars(0, top);
+                        `endif
+        //      #5000 $finish;
+                end
+endmodule
