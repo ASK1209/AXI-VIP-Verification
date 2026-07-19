@@ -11,7 +11,7 @@
 | Memory Controller Verification     | Read/Write verification                 |
 | Arbiter Verification               | Priority and fairness checks            |
 
-<img alt="image" src="https://github.com/user-attachments/assets/c842663e-7eef-4b98-b546-cf6fbd56ea61" />
+<img alt="image" src="images/Screenshot 2026-06-25 181911.png" />
 
 <img width="946" height="732" alt="Screenshot 2026-06-25 181807" src="https://github.com/user-attachments/assets/da5c3c59-59c9-49ef-8e9e-136c26c659de" />
 
