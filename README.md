@@ -11,4 +11,4 @@
 | Memory Controller Verification     | Read/Write verification                 |
 | Arbiter Verification               | Priority and fairness checks            |
 
-![Alternative text for accessibility]("images/Screenshot 2026-06-25 181911.png" "Optional hover tooltip")
+<img alt="image" src="https://github.com/user-attachments/assets/c842663e-7eef-4b98-b546-cf6fbd56ea61" />
