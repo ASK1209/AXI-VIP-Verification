@@ -326,7 +326,7 @@ AXI-VIP-Verification/
 │   └── axi_test.sv             # test (base), fixed_test, incr_test, wrap_test
 ├── sim/
 │   └── Makefile                # Questa / VCS compile + run + coverage targets
-├── images/                      # (diagrams / waveform screenshots — see repo)
+├
 └── README.md
 ```
 
