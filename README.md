@@ -10,3 +10,5 @@
 | APB Verification IP                | Reusable UVM VIP                        |
 | Memory Controller Verification     | Read/Write verification                 |
 | Arbiter Verification               | Priority and fairness checks            |
+
+![Alternative text for accessibility]("images/Screenshot 2026-06-25 181911.png" "Optional hover tooltip")
